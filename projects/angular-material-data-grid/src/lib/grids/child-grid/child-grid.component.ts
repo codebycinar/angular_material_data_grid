@@ -8,7 +8,7 @@ import {
   OnInit,
   Output
 } from '@angular/core';
-import {Subscription} from 'rxjs';
+import {Subscription, Observable} from 'rxjs';
 import GridHeadingInterface from '../../interfaces/grid-heading-type';
 import GridButtonClickInterface from '../../interfaces/grid-button-click-interface';
 import GridResponseInterface from '../../interfaces/grid-response';
@@ -31,6 +31,7 @@ export class ChildGridComponent implements OnInit {
   @Input() headings: GridHeadingInterface[] = [];
   @Input() url = '';
   @Input() entity: any = null;
+    @Input() getLocalData: ((pageNo: any, recordsPerPage: any) => Observable<any>) | undefined;
 
   loadingData = false;
   response: GridResponseInterface = { gridData: [], totalCount: 0};
@@ -200,6 +201,44 @@ export class ChildGridComponent implements OnInit {
     }
 
     console.log(body);
+
+        if (this.getLocalData) {
+            try {
+                this.gridPostSubscription = this.getLocalData(pageNo, recordsPerPage).subscribe(
+                    {
+                        next: (payload: any) => {
+                            if (payload && payload.gridData) {
+                                const gridData = this.linkCreationInterceptor(payload.gridData);
+                                this.selectedRows = [];
+                                this.response = {gridData, totalCount: payload.totalCount};
+                                this.responseBackup = {gridData, totalCount: payload.totalCount};
+                                this.gridItems = gridData;
+                                this.responseEmit.emit(this.response);
+                                if (this.serverSidePagination) {
+                                    this.loadingData = false;
+                                    this.changeDetectorRef.detectChanges();
+                                    // document.getElementById('amdgScrollViewport').scrollTop = 0;
+                                    // setTimeout(() => {
+                                    //   this.calculateGridWidth();
+                                    // }, 100);
+                                } else {
+                                    this.pageChanged({pageNo: this.currentPage, recordsPerPage: this.recordsPerPage});
+                                }
+                            }
+                        },
+                        error(err: any) {
+                            console.error('getLocalData-something wrong occurred: ' + err);
+                        },
+                        complete() {
+                            console.log('getLocalData-done');
+                        },
+                    });
+
+            } catch (err) {
+            }
+            return;
+        }
+
 
     this.gridPostSubscription = this.gridService.getAnyPost(this.url, body).subscribe(data => {
       if (data.statusCode === 200 || data.success) {

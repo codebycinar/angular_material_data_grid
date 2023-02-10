@@ -16,7 +16,7 @@ import {
   ViewChild,
   ViewEncapsulation
 } from '@angular/core';
-import {Subscription} from 'rxjs';
+import {Subscription, Observable} from 'rxjs';
 import GridRequestInterface from '../../interfaces/grid-request';
 import GridResponseInterface from '../../interfaces/grid-response';
 import GridFilterItemInterface from '../../interfaces/grid-filter-item';
@@ -81,12 +81,14 @@ export class ServerBindGridComponent implements OnInit, AfterViewInit, OnChanges
       headings: [],
       url: '',
       entity: {},
-      serverSidePagination: false
+      serverSidePagination: false,
+      getLocalData: undefined
     }
   };
   @Input() disableFullScreenToggle = false;
   @Input() pageSizes: number[] = [50, 100, 250, 500, 1000];
   @Input() pageSize: number = 100;
+  @Input() getLocalData: ((pageNo: any, recordsPerPage: any) => Observable<any>) | undefined;
 
   headingsCopy = [];
   columnSearchParam = '';
@@ -446,6 +448,51 @@ export class ServerBindGridComponent implements OnInit, AfterViewInit, OnChanges
     }
 
     this.requestBodyEmit.emit(body);
+
+    if (this.getLocalData) {
+      try {
+        this.gridPostSubscription = this.getLocalData(pageNo, recordsPerPage).subscribe(
+            {
+              next: (payload: any) => {
+                if (payload && payload.gridData) {
+                  const gridData = this.linkCreationInterceptor(payload.gridData);
+                  const {totalCount, other} = payload;
+                  this.allGridItemsSelected = false;
+                  this.selectedRows = [];
+                  this.response = {gridData, totalCount, other};
+                  this.responseBackup = {gridData, totalCount, other};
+                  this.gridItems = gridData;
+                  this.responseEmit.emit(this.response);
+                  this.selectionEmit.emit(this.selectedRows);
+                  if (this.serverSidePagination) {
+                    this.loadingData = false;
+                    this.changeDetectorRef.detectChanges();
+                    this.cdkVirtualScrollViewport.elementRef.nativeElement.scrollTop = 0;
+                    setTimeout(() => {
+                      this.calculateGridWidth();
+                    }, 100);
+                  } else {
+                    this.pageChanged({pageNo: this.currentPage, recordsPerPage: this.pageSize});
+                    this.initialFilters.forEach(filter => {
+                      this.filter(filter);
+                    });
+                  }
+                } else {
+                  this.dataErrorEmit.emit(payload);
+                }
+              },
+              error: (err: any) => {
+                this.dataErrorEmit.emit(err);
+              },
+              complete() {
+                console.log('getLocalData-done');
+              },
+            });
+      } catch (err) {
+        this.dataErrorEmit.emit(err);
+      }
+      return;
+    }
 
     this.gridPostSubscription = this.gridService.getAnyPost(this.url, body).subscribe(data => {
       if (data.statusCode === 200 || data.success) {

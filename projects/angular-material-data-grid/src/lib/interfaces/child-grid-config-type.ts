@@ -1,4 +1,5 @@
 import GridHeadingInterface from './grid-heading-type';
+import {Observable} from "rxjs";
 
 export default interface ChildGridConfigType {
 
@@ -6,4 +7,5 @@ export default interface ChildGridConfigType {
     url: string;
     entity: any;
     serverSidePagination: boolean;
+    getLocalData: ((pageNo: any, recordsPerPage: any) => Observable<any>) | undefined;
 }
